@@ -1,33 +1,27 @@
 ﻿using System.Collections.Generic;
+using System.Threading.Tasks;
+
 namespace ENode.Commanding
 {
     public class ProcessingCommand
     {
-        public string AggregateRootId { get; private set; }
-        public ICommand Command { get; private set; }
+        public ProcessingCommandMailbox MailBox { get; set; }
+        public long Sequence { get; set; }
+        public ICommand Message { get; private set; }
         public ICommandExecuteContext CommandExecuteContext { get; private set; }
-        public int RetriedCount { get; private set; }
         public IDictionary<string, string> Items { get; private set; }
+        public bool IsDuplicated { get; set; }
 
         public ProcessingCommand(ICommand command, ICommandExecuteContext commandExecuteContext, IDictionary<string, string> items)
         {
-            Command = command;
+            Message = command;
             CommandExecuteContext = commandExecuteContext;
             Items = items ?? new Dictionary<string, string>();
-
-            if (command is IAggregateCommand)
-            {
-                AggregateRootId = ((IAggregateCommand)command).AggregateRootId;
-                if (string.IsNullOrEmpty(AggregateRootId) && (!(command is ICreatingAggregateCommand)))
-                {
-                    throw new CommandAggregateRootIdMissingException(command);
-                }
-            }
         }
 
-        public void IncreaseRetriedCount()
+        public Task CompleteAsync(CommandResult commandResult)
         {
-            RetriedCount++;
+            return CommandExecuteContext.OnCommandExecutedAsync(commandResult);
         }
     }
 }

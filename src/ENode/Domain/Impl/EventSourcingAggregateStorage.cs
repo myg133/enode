@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using ECommon.IO;
 using ENode.Eventing;
 using ENode.Infrastructure;
-using ENode.Snapshoting;
 
 namespace ENode.Domain.Impl
 {
@@ -13,63 +14,62 @@ namespace ENode.Domain.Impl
         private const int maxVersion = int.MaxValue;
         private readonly IAggregateRootFactory _aggregateRootFactory;
         private readonly IEventStore _eventStore;
-        private readonly ISnapshotStore _snapshotStore;
-        private readonly ISnapshotter _snapshotter;
-        private readonly ITypeCodeProvider<IAggregateRoot> _aggregateRootTypeCodeProvider;
+        private readonly IAggregateSnapshotter _aggregateSnapshotter;
+        private readonly ITypeNameProvider _typeNameProvider;
 
         public EventSourcingAggregateStorage(
             IAggregateRootFactory aggregateRootFactory,
             IEventStore eventStore,
-            ISnapshotStore snapshotStore,
-            ISnapshotter snapshotter,
-            ITypeCodeProvider<IAggregateRoot> aggregateRootTypeCodeProvider)
+            IAggregateSnapshotter aggregateSnapshotter,
+            ITypeNameProvider typeNameProvider)
         {
             _aggregateRootFactory = aggregateRootFactory;
             _eventStore = eventStore;
-            _snapshotStore = snapshotStore;
-            _snapshotter = snapshotter;
-            _aggregateRootTypeCodeProvider = aggregateRootTypeCodeProvider;
+            _aggregateSnapshotter = aggregateSnapshotter;
+            _typeNameProvider = typeNameProvider;
         }
 
-        public IAggregateRoot Get(Type aggregateRootType, string aggregateRootId)
+        public async Task<IAggregateRoot> GetAsync(Type aggregateRootType, string aggregateRootId)
         {
+            if (aggregateRootType == null) throw new ArgumentNullException("aggregateRootType");
             if (aggregateRootId == null) throw new ArgumentNullException("aggregateRootId");
 
-            var aggregateRoot = default(IAggregateRoot);
-
-            if (TryGetFromSnapshot(aggregateRootId, aggregateRootType, out aggregateRoot))
+            var aggregateRoot = await TryGetFromSnapshot(aggregateRootId, aggregateRootType).ConfigureAwait(false);
+            if (aggregateRoot != null)
             {
                 return aggregateRoot;
             }
 
-            var aggregateRootTypeCode = _aggregateRootTypeCodeProvider.GetTypeCode(aggregateRootType);
-            var eventStreams = _eventStore.QueryAggregateEvents(aggregateRootId, aggregateRootTypeCode, minVersion, maxVersion);
+            var aggregateRootTypeName = _typeNameProvider.GetTypeName(aggregateRootType);
+            var eventStreams = await _eventStore.QueryAggregateEventsAsync(aggregateRootId, aggregateRootTypeName, minVersion, maxVersion).ConfigureAwait(false);
             aggregateRoot = RebuildAggregateRoot(aggregateRootType, eventStreams);
-
             return aggregateRoot;
         }
 
         #region Helper Methods
 
-        private bool TryGetFromSnapshot(string aggregateRootId, Type aggregateRootType, out IAggregateRoot aggregateRoot)
+        private async Task<IAggregateRoot> TryGetFromSnapshot(string aggregateRootId, Type aggregateRootType)
         {
-            aggregateRoot = null;
+            var aggregateRoot = await _aggregateSnapshotter.RestoreFromSnapshotAsync(aggregateRootType, aggregateRootId).ConfigureAwait(false);
 
-            var snapshot = _snapshotStore.GetLastestSnapshot(aggregateRootId, aggregateRootType);
-            if (snapshot == null) return false;
-
-            aggregateRoot = _snapshotter.RestoreFromSnapshot(snapshot);
-            if (aggregateRoot == null) return false;
-
-            if (aggregateRoot.UniqueId != aggregateRootId)
+            if (aggregateRoot == null)
             {
-                throw new Exception(string.Format("Aggregate root restored from snapshot not valid as the aggregate root id not matched. Snapshot aggregate root id:{0}, expected aggregate root id:{1}", aggregateRoot.UniqueId, aggregateRootId));
+                return null;
             }
 
-            var aggregateRootTypeCode = _aggregateRootTypeCodeProvider.GetTypeCode(aggregateRootType);
-            var eventStreamsAfterSnapshot = _eventStore.QueryAggregateEvents(aggregateRootId, aggregateRootTypeCode, snapshot.Version + 1, int.MaxValue);
-            aggregateRoot.ReplayEvents(eventStreamsAfterSnapshot);
-            return true;
+            if (aggregateRoot.GetType() != aggregateRootType || aggregateRoot.UniqueId != aggregateRootId)
+            {
+                throw new Exception(string.Format("AggregateRoot recovery from snapshot is invalid as the aggregateRootType or aggregateRootId is not matched. Snapshot: [aggregateRootType:{0},aggregateRootId:{1}], expected: [aggregateRootType:{2},aggregateRootId:{3}]",
+                    aggregateRoot.GetType(),
+                    aggregateRoot.UniqueId,
+                    aggregateRootType,
+                    aggregateRootId));
+            }
+
+            var aggregateRootTypeName = _typeNameProvider.GetTypeName(aggregateRootType);
+            var eventStreams = await _eventStore.QueryAggregateEventsAsync(aggregateRootId, aggregateRootTypeName, aggregateRoot.Version + 1, int.MaxValue).ConfigureAwait(false);
+            aggregateRoot.ReplayEvents(eventStreams);
+            return aggregateRoot;
         }
         private IAggregateRoot RebuildAggregateRoot(Type aggregateRootType, IEnumerable<DomainEventStream> eventStreams)
         {

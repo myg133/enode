@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 
 namespace ENode.Infrastructure
 {
@@ -6,7 +7,14 @@ namespace ENode.Infrastructure
     /// </summary>
     public interface ILockService
     {
-        void AddLockKey(string lockKey);
-        void ExecuteInLock(string lockKey, Action action);
+        /// <summary>Add a lock key.
+        /// </summary>
+        /// <param name="lockKey"></param>
+        Task AddLockKey(string lockKey);
+        /// <summary>Execute the given action with the given lock key.
+        /// </summary>
+        /// <param name="lockKey"></param>
+        /// <param name="action"></param>
+        Task ExecuteInLock(string lockKey, Func<Task> action);
     }
 }

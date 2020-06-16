@@ -1,12 +1,12 @@
 ﻿using System;
 using ENode.Commanding;
+using ENode.Infrastructure;
 
 namespace BankTransferSample.Commands
 {
     /// <summary>发起一笔存款交易
     /// </summary>
-    [Serializable]
-    public class StartDepositTransactionCommand : AggregateCommand<string>, ICreatingAggregateCommand
+    public class StartDepositTransactionCommand : Command
     {
         /// <summary>账户ID
         /// </summary>
@@ -16,7 +16,8 @@ namespace BankTransferSample.Commands
         public double Amount { get; set; }
 
         public StartDepositTransactionCommand() { }
-        public StartDepositTransactionCommand(string accountId, double amount)
+        public StartDepositTransactionCommand(string transactionId, string accountId, double amount)
+            : base(transactionId)
         {
             AccountId = accountId;
             Amount = amount;
@@ -24,8 +25,7 @@ namespace BankTransferSample.Commands
     }
     /// <summary>确认预存款
     /// </summary>
-    [Serializable]
-    public class ConfirmDepositPreparationCommand : AggregateCommand<string>
+    public class ConfirmDepositPreparationCommand : Command
     {
         public ConfirmDepositPreparationCommand() { }
         public ConfirmDepositPreparationCommand(string transactionId)
@@ -35,8 +35,7 @@ namespace BankTransferSample.Commands
     }
     /// <summary>确认存款
     /// </summary>
-    [Serializable]
-    public class ConfirmDepositCommand : AggregateCommand<string>
+    public class ConfirmDepositCommand : Command
     {
         public ConfirmDepositCommand() { }
         public ConfirmDepositCommand(string transactionId)

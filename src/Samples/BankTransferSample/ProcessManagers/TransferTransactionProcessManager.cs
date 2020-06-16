@@ -1,96 +1,111 @@
-﻿using BankTransferSample.Commands;
+﻿using System.Linq;
+using System.Threading.Tasks;
+using BankTransferSample.ApplicationMessages;
+using BankTransferSample.Commands;
 using BankTransferSample.Domain;
-using BankTransferSample.DomainEvents;
-using BankTransferSample.Exceptions;
-using ECommon.Components;
-using ENode.Eventing;
-using ENode.Exceptions;
-using ENode.Infrastructure;
+using ENode.Commanding;
+using ENode.Messaging;
 
 namespace BankTransferSample.ProcessManagers
 {
     /// <summary>银行转账交易流程管理器，用于协调银行转账交易流程中各个参与者聚合根之间的消息交互。
     /// </summary>
-    [Component]
     public class TransferTransactionProcessManager :
-        IEventHandler<TransferTransactionStartedEvent>,                  //转账交易已开始
-        IEventHandler<AccountValidatePassedEvent>,                       //账户验证已通过
-        IExceptionHandler<InvalidAccountException>,                      //无效的账户
-        IEventHandler<AccountValidatePassedConfirmCompletedEvent>,       //两个账户的验证通过事件都已确认
-        IEventHandler<TransactionPreparationAddedEvent>,                 //账户预操作已添加
-        IExceptionHandler<InsufficientBalanceException>,                 //账户余额不足
-        IEventHandler<TransferOutPreparationConfirmedEvent>,             //转账交易预转出已确认
-        IEventHandler<TransferInPreparationConfirmedEvent>,              //转账交易预转入已确认
-        IEventHandler<TransactionPreparationCommittedEvent>              //账户预操作已提交
+        IMessageHandler<TransferTransactionStartedEvent>,                  //转账交易已开始
+        IMessageHandler<AccountValidatePassedMessage>,                     //账户验证已通过
+        IMessageHandler<AccountValidateFailedMessage>,                     //账户验证未通过
+        IMessageHandler<AccountValidatePassedConfirmCompletedEvent>,       //两个账户的验证通过事件都已确认
+        IMessageHandler<TransactionPreparationAddedEvent>,                 //账户预操作已添加
+        IMessageHandler<InsufficientBalanceException>,                     //账户余额不足
+        IMessageHandler<TransferOutPreparationConfirmedEvent>,             //转账交易预转出已确认
+        IMessageHandler<TransferInPreparationConfirmedEvent>,              //转账交易预转入已确认
+        IMessageHandler<TransactionPreparationCommittedEvent>              //账户预操作已提交
     {
-        public void Handle(IHandlingContext context, TransferTransactionStartedEvent evnt)
+        private ICommandService _commandService;
+
+        public TransferTransactionProcessManager(ICommandService commandService)
         {
-            context.AddCommand(new ValidateAccountCommand(evnt.TransactionInfo.SourceAccountId, evnt.AggregateRootId));
-            context.AddCommand(new ValidateAccountCommand(evnt.TransactionInfo.TargetAccountId, evnt.AggregateRootId));
+            _commandService = commandService;
         }
-        public void Handle(IHandlingContext context, AccountValidatePassedEvent evnt)
+
+        public async Task HandleAsync(TransferTransactionStartedEvent evnt)
         {
-            context.AddCommand(new ConfirmAccountValidatePassedCommand(evnt.TransactionId, evnt.AccountId));
+            var task1 = _commandService.SendAsync(new ValidateAccountCommand(evnt.TransactionInfo.SourceAccountId, evnt.AggregateRootId) { Id = evnt.Id, Items = evnt.Items });
+            var task2 = _commandService.SendAsync(new ValidateAccountCommand(evnt.TransactionInfo.TargetAccountId, evnt.AggregateRootId) { Id = evnt.Id, Items = evnt.Items });
+            await Task.WhenAll(task1, task2).ConfigureAwait(false);
         }
-        public void Handle(IHandlingContext context, InvalidAccountException exception)
+        public async Task HandleAsync(AccountValidatePassedMessage message)
         {
-            context.AddCommand(new CancelTransferTransactionCommand(exception.TransactionId));
+            await _commandService.SendAsync(new ConfirmAccountValidatePassedCommand(message.TransactionId, message.AccountId) { Id = message.Id, Items = message.Items });
         }
-        public void Handle(IHandlingContext context, AccountValidatePassedConfirmCompletedEvent evnt)
+        public async Task HandleAsync(AccountValidateFailedMessage message)
         {
-            context.AddCommand(new AddTransactionPreparationCommand(
+            await _commandService.SendAsync(new CancelTransferTransactionCommand(message.TransactionId) { Id = message.Id, Items = message.Items });
+        }
+        public async Task HandleAsync(AccountValidatePassedConfirmCompletedEvent evnt)
+        {
+            await _commandService.SendAsync(new AddTransactionPreparationCommand(
                 evnt.TransactionInfo.SourceAccountId,
                 evnt.AggregateRootId,
                 TransactionType.TransferTransaction,
                 PreparationType.DebitPreparation,
-                evnt.TransactionInfo.Amount));
+                evnt.TransactionInfo.Amount)
+            {
+                Id = evnt.Id,
+                Items = evnt.Items
+            });
         }
-        public void Handle(IHandlingContext context, TransactionPreparationAddedEvent evnt)
+        public async Task HandleAsync(TransactionPreparationAddedEvent evnt)
         {
             if (evnt.TransactionPreparation.TransactionType == TransactionType.TransferTransaction)
             {
                 if (evnt.TransactionPreparation.PreparationType == PreparationType.DebitPreparation)
                 {
-                    context.AddCommand(new ConfirmTransferOutPreparationCommand(evnt.TransactionPreparation.TransactionId));
+                    await _commandService.SendAsync(new ConfirmTransferOutPreparationCommand(evnt.TransactionPreparation.TransactionId) { Id = evnt.Id, Items = evnt.Items });
                 }
                 else if (evnt.TransactionPreparation.PreparationType == PreparationType.CreditPreparation)
                 {
-                    context.AddCommand(new ConfirmTransferInPreparationCommand(evnt.TransactionPreparation.TransactionId));
+                    await _commandService.SendAsync(new ConfirmTransferInPreparationCommand(evnt.TransactionPreparation.TransactionId) { Id = evnt.Id, Items = evnt.Items });
                 }
             }
         }
-        public void Handle(IHandlingContext context, InsufficientBalanceException exception)
+        public async Task HandleAsync(InsufficientBalanceException exception)
         {
             if (exception.TransactionType == TransactionType.TransferTransaction)
             {
-                context.AddCommand(new CancelTransferTransactionCommand(exception.TransactionId));
+                await _commandService.SendAsync(new CancelTransferTransactionCommand(exception.TransactionId) { Id = exception.Id, Items = exception.Items });
             }
         }
-        public void Handle(IHandlingContext context, TransferOutPreparationConfirmedEvent evnt)
+        public async Task HandleAsync(TransferOutPreparationConfirmedEvent evnt)
         {
-            context.AddCommand(new AddTransactionPreparationCommand(
+            await _commandService.SendAsync(new AddTransactionPreparationCommand(
                 evnt.TransactionInfo.TargetAccountId,
                 evnt.AggregateRootId,
                 TransactionType.TransferTransaction,
                 PreparationType.CreditPreparation,
-                evnt.TransactionInfo.Amount));
+                evnt.TransactionInfo.Amount)
+            {
+                Id = evnt.Id,
+                Items = evnt.Items
+            });
         }
-        public void Handle(IHandlingContext context, TransferInPreparationConfirmedEvent evnt)
+        public async Task HandleAsync(TransferInPreparationConfirmedEvent evnt)
         {
-            context.AddCommand(new CommitTransactionPreparationCommand(evnt.TransactionInfo.SourceAccountId, evnt.AggregateRootId));
-            context.AddCommand(new CommitTransactionPreparationCommand(evnt.TransactionInfo.TargetAccountId, evnt.AggregateRootId));
+            var task1 = _commandService.SendAsync(new CommitTransactionPreparationCommand(evnt.TransactionInfo.SourceAccountId, evnt.AggregateRootId) { Id = evnt.Id, Items = evnt.Items });
+            var task2 = _commandService.SendAsync(new CommitTransactionPreparationCommand(evnt.TransactionInfo.TargetAccountId, evnt.AggregateRootId) { Id = evnt.Id, Items = evnt.Items });
+            await Task.WhenAll(task1, task2).ConfigureAwait(false);
         }
-        public void Handle(IHandlingContext context, TransactionPreparationCommittedEvent evnt)
+        public async Task HandleAsync(TransactionPreparationCommittedEvent evnt)
         {
             if (evnt.TransactionPreparation.TransactionType == TransactionType.TransferTransaction)
             {
                 if (evnt.TransactionPreparation.PreparationType == PreparationType.DebitPreparation)
                 {
-                    context.AddCommand(new ConfirmTransferOutCommand(evnt.TransactionPreparation.TransactionId));
+                    await _commandService.SendAsync(new ConfirmTransferOutCommand(evnt.TransactionPreparation.TransactionId) { Id = evnt.Id, Items = evnt.Items });
                 }
                 else if (evnt.TransactionPreparation.PreparationType == PreparationType.CreditPreparation)
                 {
-                    context.AddCommand(new ConfirmTransferInCommand(evnt.TransactionPreparation.TransactionId));
+                    await _commandService.SendAsync(new ConfirmTransferInCommand(evnt.TransactionPreparation.TransactionId) { Id = evnt.Id, Items = evnt.Items });
                 }
             }
         }

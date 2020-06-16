@@ -1,13 +1,13 @@
 ﻿using System;
 using BankTransferSample.Domain;
 using ENode.Commanding;
+using ENode.Infrastructure;
 
 namespace BankTransferSample.Commands
 {
     /// <summary>开户（创建一个账户）
     /// </summary>
-    [Serializable]
-    public class CreateAccountCommand : AggregateCommand<string>, ICreatingAggregateCommand
+    public class CreateAccountCommand : Command
     {
         public string Owner { get; set; }
 
@@ -19,28 +19,19 @@ namespace BankTransferSample.Commands
     }
     /// <summary>验证账户是否合法
     /// </summary>
-    [Serializable]
     public class ValidateAccountCommand : Command
     {
-        public string AccountId { get; set; }
         public string TransactionId { get; set; }
 
         public ValidateAccountCommand() { }
-        public ValidateAccountCommand(string accountId, string transactionId)
+        public ValidateAccountCommand(string accountId, string transactionId) : base(accountId)
         {
-            AccountId = accountId;
             TransactionId = transactionId;
-        }
-
-        public override object GetKey()
-        {
-            return AccountId;
         }
     }
     /// <summary>向账户添加一笔预操作
     /// </summary>
-    [Serializable]
-    public class AddTransactionPreparationCommand : AggregateCommand<string>
+    public class AddTransactionPreparationCommand : Command
     {
         public string TransactionId { get; set; }
         public TransactionType TransactionType { get; set; }
@@ -59,8 +50,7 @@ namespace BankTransferSample.Commands
     }
     /// <summary>提交预操作
     /// </summary>
-    [Serializable]
-    public class CommitTransactionPreparationCommand : AggregateCommand<string>
+    public class CommitTransactionPreparationCommand : Command
     {
         public string TransactionId { get; set; }
 

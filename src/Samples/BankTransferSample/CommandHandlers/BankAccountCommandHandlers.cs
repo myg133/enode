@@ -1,43 +1,57 @@
-﻿using BankTransferSample.Commands;
+﻿using System.Threading.Tasks;
+using BankTransferSample.ApplicationMessages;
+using BankTransferSample.Commands;
 using BankTransferSample.Domain;
-using BankTransferSample.DomainEvents;
-using BankTransferSample.Exceptions;
-using ECommon.Components;
+using ECommon.IO;
 using ENode.Commanding;
+using ENode.Infrastructure;
+using ENode.Messaging;
 
 namespace BankTransferSample.CommandHandlers
 {
     /// <summary>银行账户相关命令处理
     /// </summary>
-    [Component]
     public class BankAccountCommandHandlers :
         ICommandHandler<CreateAccountCommand>,                       //开户
         ICommandHandler<ValidateAccountCommand>,                     //验证账户是否合法
         ICommandHandler<AddTransactionPreparationCommand>,           //添加预操作
         ICommandHandler<CommitTransactionPreparationCommand>         //提交预操作
     {
-        public void Handle(ICommandContext context, CreateAccountCommand command)
+        public bool CheckCommandHandledFirst
         {
-            context.Add(new BankAccount(command.AggregateRootId, command.Owner));
+            get { return true; }
         }
-        public void Handle(ICommandContext context, ValidateAccountCommand command)
+
+        public Task HandleAsync(ICommandContext context, CreateAccountCommand command)
         {
-            if (command.AccountId == "00001" || command.AccountId == "00002")
+            return context.AddAsync(new BankAccount(command.AggregateRootId, command.Owner));
+        }
+        public Task HandleAsync(ICommandContext context, ValidateAccountCommand command)
+        {
+            var applicationMessage = default(ApplicationMessage);
+
+            //此处应该会调用外部接口验证账号是否合法，这里仅仅简单通过账号是否以INVALID字符串开头来判断是否合法；根据账号的合法性，返回不同的应用层消息
+            if (command.AggregateRootId.StartsWith("INVALID"))
             {
-                context.Add(new AccountValidatePassedEvent(command.AccountId, command.TransactionId));
+                applicationMessage = new AccountValidateFailedMessage(command.AggregateRootId, command.TransactionId, "账户不合法.");
             }
             else
             {
-                throw new InvalidAccountException(command.AccountId, command.TransactionId, "账户必须是00001或00002.");
+                applicationMessage = new AccountValidatePassedMessage(command.AggregateRootId, command.TransactionId);
             }
+
+            context.SetApplicationMessage(applicationMessage);
+            return Task.CompletedTask;
         }
-        public void Handle(ICommandContext context, AddTransactionPreparationCommand command)
+        public async Task HandleAsync(ICommandContext context, AddTransactionPreparationCommand command)
         {
-            context.Get<BankAccount>(command.AggregateRootId).AddTransactionPreparation(command.TransactionId, command.TransactionType, command.PreparationType, command.Amount);
+            var account = await context.GetAsync<BankAccount>(command.AggregateRootId);
+            account.AddTransactionPreparation(command.TransactionId, command.TransactionType, command.PreparationType, command.Amount);
         }
-        public void Handle(ICommandContext context, CommitTransactionPreparationCommand command)
+        public async Task HandleAsync(ICommandContext context, CommitTransactionPreparationCommand command)
         {
-            context.Get<BankAccount>(command.AggregateRootId).CommitTransactionPreparation(command.TransactionId);
+            var account = await context.GetAsync<BankAccount>(command.AggregateRootId);
+            account.CommitTransactionPreparation(command.TransactionId);
         }
     }
 }

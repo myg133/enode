@@ -9,19 +9,15 @@ namespace ENode.Commanding.Impl
         {
             throw new NotImplementedException();
         }
-        public void Send(ICommand command, string sourceId, string sourceType)
+        public Task SendAsync(ICommand command)
         {
             throw new NotImplementedException();
         }
-        public Task<CommandSendResult> SendAsync(ICommand command)
+        public Task<CommandResult> ExecuteAsync(ICommand command)
         {
             throw new NotImplementedException();
         }
-        public Task<CommandResult> Execute(ICommand command)
-        {
-            throw new NotImplementedException();
-        }
-        public Task<CommandResult> Execute(ICommand command, CommandReturnType commandReturnType)
+        public Task<CommandResult> ExecuteAsync(ICommand command, CommandReturnType commandReturnType)
         {
             throw new NotImplementedException();
         }

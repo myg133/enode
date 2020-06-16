@@ -2,32 +2,37 @@
 {
     public class ConfigurationSetting
     {
-        public bool EnableGroupCommitEvent { get; set; }
-        public int GroupCommitEventInterval { get; set; }
-        public int GroupCommitEventMaxCount { get; set; }
-        public int EventProcessorParallelThreadCount { get; set; }
-        public int ExceptionProcessorParallelThreadCount { get; set; }
-        public int MessageProcessorParallelThreadCount { get; set; }
-        public string SqlServerDefaultConnectionString { get; set; }
-        public DbTableSetting SqlServerLockServiceSetting { get; set; }
-        public DbTableSetting SqlServerCommandStoreSetting { get; set; }
-        public DbTableSetting SqlServerEventStoreSetting { get; set; }
-        public DbTableSetting SqlServerEventPublishInfoStoreSetting { get; set; }
-        public DbTableSetting SqlServerEventHandleInfoStoreSetting { get; set; }
+        /// <summary>处理领域事件的处理器的名字；DefaultEventProcessor
+        /// </summary>
+        public string DomainEventProcessorName { get; set; }
+        /// <summary>当使用默认的从内存清理聚合根的服务时，该属性用于配置扫描过期的聚合根的时间间隔，默认为5秒；
+        /// </summary>
+        public int ScanExpiredAggregateIntervalMilliseconds { get; set; }
+        /// <summary>定时获取CQRS的Q端的聚合根的EventMailBox的最新已处理的事件的版本号的定时任务的时间间隔，默认为5秒；
+        /// </summary>
+        public int ProcessTryToRefreshAggregateIntervalMilliseconds { get; set; }
+        /// <summary>当使用默认的MemoryCache时，该属性用于配置聚合根的最长允许的不活跃时间，超过这个时间就认为是过期，就可以从内存清除了；然后下次如果再需要用的时候再重新加载进来；默认为3天；
+        /// </summary>
+        public int AggregateRootMaxInactiveSeconds { get; set; }
+        /// <summary>CommandMailBox中的命令处理时一次最多处理多少个，默认为1000个
+        /// </summary>
+        public int CommandMailBoxProcessBatchSize { get; set; }
+        /// <summary>EventMailBox的个数，默认为4个
+        /// </summary>
+        public int EventMailBoxCount { get; set; }
+        /// <summary>EventMailBox中的事件持久化时一次最多持久化多少个事件，默认为1000个
+        /// </summary>
+        public int EventMailBoxPersistenceMaxBatchSize { get; set; }
 
         public ConfigurationSetting()
         {
-            EnableGroupCommitEvent = false;
-            GroupCommitEventInterval = 50;
-            GroupCommitEventMaxCount = 50;
-            EventProcessorParallelThreadCount = 4;
-            ExceptionProcessorParallelThreadCount = 1;
-            MessageProcessorParallelThreadCount = 1;
-            SqlServerLockServiceSetting = new DbTableSetting(this) { TableName = "Lock" };
-            SqlServerCommandStoreSetting = new DbTableSetting(this) { TableName = "Command", PrimaryKeyName = "PK_Command" };
-            SqlServerEventStoreSetting = new DbTableSetting(this) { TableName = "EventStream", PrimaryKeyName = "PK_EventStream" };
-            SqlServerEventPublishInfoStoreSetting = new DbTableSetting(this) { TableName = "EventPublishInfo", PrimaryKeyName = "PK_EventPublishInfo" };
-            SqlServerEventHandleInfoStoreSetting = new DbTableSetting(this) { TableName = "EventHandleInfo" };
+            DomainEventProcessorName = "DefaultEventProcessor";
+            ScanExpiredAggregateIntervalMilliseconds = 5000;
+            ProcessTryToRefreshAggregateIntervalMilliseconds = 5000;
+            AggregateRootMaxInactiveSeconds = 3600 * 24 * 3;
+            CommandMailBoxProcessBatchSize = 1000;
+            EventMailBoxCount = 4;
+            EventMailBoxPersistenceMaxBatchSize = 1000;
         }
     }
 }

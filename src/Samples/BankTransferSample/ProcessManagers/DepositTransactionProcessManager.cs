@@ -1,48 +1,56 @@
-﻿using BankTransferSample.Commands;
+﻿using System.Threading.Tasks;
+using BankTransferSample.Commands;
 using BankTransferSample.Domain;
-using BankTransferSample.DomainEvents;
-using ECommon.Components;
-using ENode.Eventing;
-using ENode.Infrastructure;
+using ENode.Commanding;
+using ENode.Messaging;
 
 namespace BankTransferSample.ProcessManagers
 {
     /// <summary>银行存款交易流程管理器，用于协调银行存款交易流程中各个参与者聚合根之间的消息交互。
     /// </summary>
-    [Component]
     public class DepositTransactionProcessManager :
-        IEventHandler<DepositTransactionStartedEvent>,                    //存款交易已开始
-        IEventHandler<DepositTransactionPreparationCompletedEvent>,                  //存款交易已提交
-        IEventHandler<TransactionPreparationAddedEvent>,                  //账户预操作已添加
-        IEventHandler<TransactionPreparationCommittedEvent>               //账户预操作已提交
+        IMessageHandler<DepositTransactionStartedEvent>,                    //存款交易已开始
+        IMessageHandler<DepositTransactionPreparationCompletedEvent>,       //存款交易已提交
+        IMessageHandler<TransactionPreparationAddedEvent>,                  //账户预操作已添加
+        IMessageHandler<TransactionPreparationCommittedEvent>               //账户预操作已提交
     {
-        public void Handle(IHandlingContext context, DepositTransactionStartedEvent evnt)
+        private ICommandService _commandService;
+
+        public DepositTransactionProcessManager(ICommandService commandService)
         {
-            context.AddCommand(new AddTransactionPreparationCommand(
+            _commandService = commandService;
+        }
+
+        public async Task HandleAsync(DepositTransactionStartedEvent evnt)
+        {
+            await _commandService.SendAsync(new AddTransactionPreparationCommand(
                 evnt.AccountId,
                 evnt.AggregateRootId,
                 TransactionType.DepositTransaction,
                 PreparationType.CreditPreparation,
-                evnt.Amount));
+                evnt.Amount)
+            {
+                Id = evnt.Id
+            });
         }
-        public void Handle(IHandlingContext context, TransactionPreparationAddedEvent evnt)
+        public async Task HandleAsync(TransactionPreparationAddedEvent evnt)
         {
             if (evnt.TransactionPreparation.TransactionType == TransactionType.DepositTransaction &&
                 evnt.TransactionPreparation.PreparationType == PreparationType.CreditPreparation)
             {
-                context.AddCommand(new ConfirmDepositPreparationCommand(evnt.TransactionPreparation.TransactionId));
+                await _commandService.SendAsync(new ConfirmDepositPreparationCommand(evnt.TransactionPreparation.TransactionId) { Id = evnt.Id });
             }
         }
-        public void Handle(IHandlingContext context, DepositTransactionPreparationCompletedEvent evnt)
+        public async Task HandleAsync(DepositTransactionPreparationCompletedEvent evnt)
         {
-            context.AddCommand(new CommitTransactionPreparationCommand(evnt.AccountId, evnt.AggregateRootId));
+            await _commandService.SendAsync(new CommitTransactionPreparationCommand(evnt.AccountId, evnt.AggregateRootId) { Id = evnt.Id });
         }
-        public void Handle(IHandlingContext context, TransactionPreparationCommittedEvent evnt)
+        public async Task HandleAsync(TransactionPreparationCommittedEvent evnt)
         {
             if (evnt.TransactionPreparation.TransactionType == TransactionType.DepositTransaction &&
                 evnt.TransactionPreparation.PreparationType == PreparationType.CreditPreparation)
             {
-                context.AddCommand(new ConfirmDepositCommand(evnt.TransactionPreparation.TransactionId));
+                await _commandService.SendAsync(new ConfirmDepositCommand(evnt.TransactionPreparation.TransactionId) { Id = evnt.Id });
             }
         }
     }

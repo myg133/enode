@@ -1,16 +1,14 @@
 ﻿using System.Threading;
-using BankTransferSample.DomainEvents;
-using ECommon.Components;
-using ENode.Eventing;
-using ENode.Infrastructure;
+using System.Threading.Tasks;
+using BankTransferSample.Domain;
+using ENode.Messaging;
 
 namespace BankTransferSample.EventHandlers
 {
-    [Component]
     public class SyncHelper :
-        IEventHandler<DepositTransactionCompletedEvent>,
-        IEventHandler<TransferTransactionCompletedEvent>,
-        IEventHandler<TransferTransactionCanceledEvent>
+        IMessageHandler<DepositTransactionCompletedEvent>,
+        IMessageHandler<TransferTransactionCompletedEvent>,
+        IMessageHandler<TransferTransactionCanceledEvent>
     {
         private ManualResetEvent _waitHandle = new ManualResetEvent(false);
 
@@ -19,20 +17,23 @@ namespace BankTransferSample.EventHandlers
             _waitHandle.WaitOne();
         }
 
-        public void Handle(IHandlingContext context, DepositTransactionCompletedEvent message)
+        public Task HandleAsync(DepositTransactionCompletedEvent message)
         {
             _waitHandle.Set();
             _waitHandle = new ManualResetEvent(false);
+            return Task.CompletedTask;
         }
-        public void Handle(IHandlingContext context, TransferTransactionCompletedEvent message)
+        public Task HandleAsync(TransferTransactionCompletedEvent message)
         {
             _waitHandle.Set();
             _waitHandle = new ManualResetEvent(false);
+            return Task.CompletedTask;
         }
-        public void Handle(IHandlingContext context, TransferTransactionCanceledEvent message)
+        public Task HandleAsync(TransferTransactionCanceledEvent message)
         {
             _waitHandle.Set();
             _waitHandle = new ManualResetEvent(false);
+            return Task.CompletedTask;
         }
     }
 }

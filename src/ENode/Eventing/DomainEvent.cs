@@ -1,46 +1,37 @@
 ﻿using System;
+using ENode.Infrastructure;
+using ENode.Messaging;
 
 namespace ENode.Eventing
 {
-    /// <summary>Represents an abstract base domain event.
+    /// <summary>Represents an abstract generic domain event.
     /// </summary>
     [Serializable]
-    public abstract class DomainEvent<TAggregateRootId> : Event, IDomainEvent
+    public abstract class DomainEvent<TAggregateRootId> : Message, IDomainEvent<TAggregateRootId>
     {
-        /// <summary>Represents the source aggregate root id of the domain event.
-        /// </summary>
-        public TAggregateRootId AggregateRootId { get; set; }
-        /// <summary>Represents the version of the domain event.
-        /// </summary>
-        public int Version { get; set; }
-        /// <summary>Represents the occurred time of the domain event.
-        /// </summary>
-        public DateTime Timestamp { get; set; }
+        private TAggregateRootId _aggregateRootId;
 
-        /// <summary>Default constructor.
-        /// </summary>
-        public DomainEvent() : base() { }
-        /// <summary>Parameterized constructor.
-        /// </summary>
-        public DomainEvent(TAggregateRootId aggregateRootId) : base()
+        public string CommandId { get; set; }
+        public TAggregateRootId AggregateRootId
         {
-            if (aggregateRootId == null)
+            get { return _aggregateRootId; }
+            set
             {
-                throw new ArgumentNullException("aggregateRootId");
+                _aggregateRootId = value;
+                AggregateRootStringId = value?.ToString();
             }
-            AggregateRootId = aggregateRootId;
         }
+        public string AggregateRootStringId { get; set; }
+        public string AggregateRootTypeName { get; set; }
+        public int Version { get; set; }
+        public int SpecVersion { get; set; }
+        public int Sequence { get; set; }
 
-        string IDomainEvent.AggregateRootId
+        public DomainEvent() : base()
         {
-            get
-            {
-                if (this.AggregateRootId != null)
-                {
-                    return this.AggregateRootId.ToString();
-                }
-                return null;
-            }
+            Version = 1;
+            SpecVersion = 1;
+            Sequence = 1;
         }
     }
 }
